@@ -19,7 +19,7 @@ interface QueueItem { id: string; videoId: string; youtubeLink: string; addedBy:
 interface Room { sessionId: string; name: string; youtubeLink: string; videoId: string; position: number; isPlaying: boolean; hostId: string | null; participants: Participant[]; messages: ChatMessage[]; queue: QueueItem[]; }
 
 const palette = ["#e7a77e", "#a9b6a1", "#b99ecb", "#d5857e", "#8db8c1", "#d8bd78"];
-const WebSocketUrl = () => `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
+const WebSocketUrl = () => import.meta.env.VITE_WS_URL || `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
 
 const WatchSession: React.FC = () => {
   const { sessionId = "" } = useParams();

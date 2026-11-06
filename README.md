@@ -14,7 +14,7 @@ Afterplay makes a YouTube watch night feel shared, even when everyone is somewhe
 
 ## Architecture
 
-The project uses a React 18 and TypeScript single-page app built with Vite, served as static assets by an Express server. The Express server owns the HTTP API and a `ws` WebSocket endpoint on the same HTTP listener. This keeps API and socket traffic on one origin and works behind a standard HTTPS reverse proxy.
+The project uses a React 18 and TypeScript single-page app built with Vite. In production, Vercel serves the frontend at `gentshare.vercel.app`, proxies `/api/*` calls to the Express service on Render, and the browser opens its WebSocket directly to that service. Express owns the HTTP API and the `ws` WebSocket endpoint on one persistent HTTP listener.
 
 Room state is authoritative in the server process. Playback position is stored with a server timestamp while playing, so late joiners get the current position rather than a stale value. The first connected participant is host; playback and queue changes are host-controlled, while chat and adding videos are available to everyone in the room.
 
@@ -26,7 +26,8 @@ The current deployment shape is a single server instance with in-memory rooms. A
 - Express 5, Node.js, `ws`, YouTube IFrame Player API
 - Material UI icons
 - Node's built-in test runner
-- Render Web Service (HTTP and WebSockets served together)
+- Vercel (static frontend and API rewrites)
+- Render Web Service (persistent HTTP API and WebSockets)
 
 ## Run locally
 
@@ -54,8 +55,9 @@ For frontend development with hot reload, use two terminals. Start the server wi
 | --- | --- | --- |
 | `PORT` | No | HTTP and WebSocket listener; defaults to `5000` locally. Set by Render in production. |
 | `NODE_ENV` | No | Set to `production` by the Render Blueprint. |
+| `VITE_WS_URL` | Production frontend | WebSocket URL for the Render service, e.g. `wss://afterplay-h8tc.onrender.com/ws`. Vite embeds it at build time. |
 
-The browser selects `ws://` locally and `wss://` on HTTPS, using the current page's origin.
+The local Vite development server proxies API and WebSocket traffic to `localhost:5000`. Production API requests are forwarded by the Vercel rewrite in `vercel.json`; the frontend's `VITE_WS_URL` connects to Render.
 
 ## Checks
 
@@ -67,13 +69,13 @@ npm run build
 
 The server integration test covers URL validation, room creation, host assignment, playback synchronization, host-only controls, chat, queue updates, presence, and late joining.
 
-## Deploy on Render
+## Deploy
 
-The repository includes `render.yaml` for a single free Render Web Service. Connect the GitHub repository to Render and create a Blueprint instance from the dashboard. Render builds the React app and runs Express; HTTP and WebSocket upgrades use the same public origin. The service exposes `/api/health` for its health check.
+The repository includes `render.yaml` for the Render backend and `vercel.json` for the Vercel frontend. Deploy the Render Blueprint as one free Web Service; it builds the app and runs Express, and exposes `/api/health` as its health check. Keep it at one instance because rooms are held in memory.
 
-Render accepts public WebSocket connections on web services and routes them through the same listener; use `wss://` for public clients. See [Render WebSockets](https://render.com/docs/websocket) and [Render Web Services](https://render.com/docs/web-services).
+The Vercel project `gentshare` is connected to this GitHub repository. Its `VITE_WS_URL` project variable points production and preview builds at Render. The `vercel.json` configuration sends `/api/*` to Render and routes client-side pages to the Vite entry point. Render accepts public WebSocket connections on web services; see [Render WebSockets](https://render.com/docs/websocket) and [Render Web Services](https://render.com/docs/web-services).
 
-**Production URL:** [https://afterplay-h8tc.onrender.com](https://afterplay-h8tc.onrender.com). The free service may spin down when idle, and this in-memory version loses rooms during restarts or deploys.
+**Production app:** [https://gentshare.vercel.app](https://gentshare.vercel.app) (Vercel frontend). **Backend:** [https://afterplay-h8tc.onrender.com](https://afterplay-h8tc.onrender.com). The free Render service may spin down when idle, and this in-memory version loses rooms during restarts or deploys.
 
 ## Repository
 
