@@ -73,7 +73,7 @@ The repository includes `render.yaml` for a single free Render Web Service. Conn
 
 Render accepts public WebSocket connections on web services and routes them through the same listener; use `wss://` for public clients. See [Render WebSockets](https://render.com/docs/websocket) and [Render Web Services](https://render.com/docs/web-services).
 
-**Production URL:** Not deployed yet. The Render service must be created in an account with access to this GitHub repository. Once created, copy its `onrender.com` URL here. A free service may spin down when idle, and this in-memory version loses rooms during restarts or deploys.
+**Production URL:** [https://afterplay-h8tc.onrender.com](https://afterplay-h8tc.onrender.com). The free service may spin down when idle, and this in-memory version loses rooms during restarts or deploys.
 
 ## Repository
 
