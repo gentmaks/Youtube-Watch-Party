@@ -1,149 +1,227 @@
-// server.js
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
 const path = require('path');
-const WebSocket = require('ws');
-const app = express();
-const wss = new WebSocket.Server({ port: process.env.WS_PORT });
-const { MongoClient } = require('mongodb');
-const port = process.env.PORT || 5000;
-let db;
-app.use(express.json());
+const { WebSocketServer, WebSocket } = require('ws');
+const { randomUUID } = require('crypto');
 
-// Connect to the database (used for disaster recovery)
-MongoClient.connect(process.env.MONGODB_URI, { useUnifiedTopology: true }, (err, client) => {
-    if (err) throw err;
-    db = client.db('watchPartyDatabase');
-    console.log('Connected to database');
-});
+const PORT = Number(process.env.PORT) || 5000;
+const MAX_CHAT_MESSAGES = 100;
+const rooms = new Map();
+const clients = new Map();
 
-const watchPartyDatabase = {}; // In memory cache solution used to reduce database calls
-
-// The watch party object that is stored in the database
-const watchPartyObj = {
-    youtubeLink: '',
-    timestamp: 0,
-    timeOfLastUpdate: 0,
-    isPlaying: false,
-    sessionId: ''
-};
-
-// Serve static files from the React app
-app.use(express.static(path.join(__dirname.replace('src', 'build'))));
-
-// api endpoint to create a new session
-// it takes in a youtube link and a sessionId and creates a new watch party object
-// and stores it in the database and in the in memory cache
-app.post('/api/createSession', (req, res) => {
-    console.log(req.body);
-    const sessionId = req.body.sessionId;
-    const youtubeLink = req.body.youtubeVidUrl;
-    watchPartyDatabase[sessionId] = { ...watchPartyObj, youtubeLink, sessionId };
-    // insert into the database using the sessionId as the key
-    db.collection('watchParty').insertOne({ ...watchPartyObj, youtubeLink, sessionId }, (err, result) => {
-        if (err) {
-            console.log(err);
-            res.send(false);
-        } else {
-            console.log('Inserted new watch party object into database: ', watchPartyDatabase[sessionId]);
-            res.send(true);
-        }
-    });
-});
-
-// api endpoint to get a watch party object from the database
-// it takes in a sessionId and returns the watch party object
-app.get('/api/session/:sessionId', (req, res) => {
-    const sessionId = req.params.sessionId;
-    if (watchPartyDatabase[sessionId]) {
-        res.json(watchPartyDatabase[sessionId]);
-    } else {
-        // if the session does not exist in the in memory cache, then we query the database
-        db.collection('watchParty').findOne({ sessionId }, (err, result) => {
-            if (err) {
-                console.log(err);
-                res.send(false);
-            } else if (result) {
-                console.log('found session in database ' + JSON.stringify(result));
-                watchPartyDatabase[sessionId] = result;
-                res.json(result);
-            } else {
-                console.log('session not found on database ' + sessionId);
-                res.send(false);
-            }
-        });
+function getYouTubeId(input) {
+  if (typeof input !== 'string' || input.length > 2048) return null;
+  try {
+    const parsed = new URL(input.trim());
+    const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+    let id = null;
+    if (host === 'youtu.be') id = parsed.pathname.split('/').filter(Boolean)[0];
+    if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
+      if (parsed.pathname === '/watch') id = parsed.searchParams.get('v');
+      else if (/^\/(embed|shorts|live)\//.test(parsed.pathname)) id = parsed.pathname.split('/')[2];
     }
-});
+    return id && /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+  } catch (_) {
+    return null;
+  }
+}
 
-// The "catchall" handler: for any request that doesn't
-// match one above, send back React's index.html file.
-app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname.replace('src', 'build'), 'index.html'));
-});
+function currentPosition(room, now = Date.now()) {
+  if (!room.playing || !room.startedAt) return room.position;
+  return Math.max(0, room.position + (now - room.startedAt) / 1000);
+}
 
-// Start the server
-app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
-});
+function snapshot(room) {
+  return {
+    sessionId: room.id,
+    name: room.name,
+    youtubeLink: room.youtubeLink,
+    videoId: room.videoId,
+    position: currentPosition(room),
+    isPlaying: room.playing,
+    updatedAt: room.updatedAt,
+    hostId: room.hostId,
+    participants: [...room.participants.values()],
+    messages: room.messages,
+    queue: room.queue,
+  };
+}
 
-// Websocket connection
-wss.on('connection', (ws) => {
-    console.log('Websocket connection established');
-    // When a client connects give them an id and send them the current watch party object
-    ws.on('message', (message) => {
-        const { sessionId, action, timestamp, clientId } = JSON.parse(message);
-        console.log(message);
-        switch (action) {
-            case 'INITIALIZE':
-                const newClientId = Math.random().toString(36).substring(2, 15);
-                if (!watchPartyDatabase[sessionId].isPlaying) {
-                    watchPartyDatabase[sessionId].timeOfLastUpdate = Date.now();
-                } else {
-                    let secondsPassed = (Date.now() - watchPartyDatabase[sessionId].timeOfLastUpdate) / 1000;
-                    watchPartyDatabase[sessionId].timeOfLastUpdate = Date.now();
-                    watchPartyDatabase[sessionId].timestamp += secondsPassed;
-                }
-                ws.send(JSON.stringify({ clientId: newClientId, watchParty: watchPartyDatabase[sessionId], action }));
-                break;
-            case 'PLAY':
-                watchPartyDatabase[sessionId].timestamp = timestamp;
-                watchPartyDatabase[sessionId].timeOfLastUpdate = Date.now();
-                watchPartyDatabase[sessionId].isPlaying = true;
-                break;
-            case 'PAUSE':
-                watchPartyDatabase[sessionId].timestamp = timestamp;
-                watchPartyDatabase[sessionId].timeOfLastUpdate = Date.now();
-                watchPartyDatabase[sessionId].isPlaying = false;
-                break;
-            case 'SEEK':
-                watchPartyDatabase[sessionId].timestamp = timestamp;
-                watchPartyDatabase[sessionId].timeOfLastUpdate = Date.now();
-                break;
-            case 'BUFFER':
-                watchPartyDatabase[sessionId].timestamp = timestamp;
-                watchPartyDatabase[sessionId].timeOfLastUpdate = Date.now();
-                break;
-            default:
-                break;
+function broadcast(room, payload) {
+  const data = JSON.stringify(payload);
+  for (const [socket, client] of clients) {
+    if (client.roomId === room.id && socket.readyState === WebSocket.OPEN) socket.send(data);
+  }
+}
+
+function sendRoom(room, type, extra = {}) {
+  broadcast(room, { type, room: snapshot(room), ...extra });
+}
+
+function createApp() {
+  const app = express();
+  app.use(express.json({ limit: '16kb' }));
+
+  app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
+  app.post('/api/sessions', (req, res) => {
+    const videoId = getYouTubeId(req.body?.youtubeUrl);
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 60) : '';
+    if (!videoId) return res.status(400).json({ error: 'Enter a valid YouTube video link.' });
+    const id = randomUUID();
+    const room = {
+      id,
+      name: name || 'Friday night watch party',
+      youtubeLink: `https://www.youtube.com/watch?v=${videoId}`,
+      videoId,
+      position: 0,
+      playing: false,
+      startedAt: null,
+      updatedAt: Date.now(),
+      hostId: null,
+      participants: new Map(),
+      messages: [],
+      queue: [],
+    };
+    rooms.set(id, room);
+    return res.status(201).json({ sessionId: id, room: snapshot(room) });
+  });
+
+  app.get('/api/sessions/:sessionId', (req, res) => {
+    const room = rooms.get(req.params.sessionId);
+    if (!room) return res.status(404).json({ error: 'This room could not be found.' });
+    return res.json({ room: snapshot(room) });
+  });
+
+  const buildPath = path.join(__dirname, '..', 'build');
+  app.use(express.static(buildPath));
+  app.get('*', (_req, res) => res.sendFile(path.join(buildPath, 'index.html')));
+  return app;
+}
+
+function createServer() {
+  const app = createApp();
+  const server = http.createServer(app);
+  const wss = new WebSocketServer({ server, path: '/ws' });
+
+  wss.on('connection', (socket) => {
+    const clientId = randomUUID();
+    clients.set(socket, { clientId, roomId: null, name: 'Guest' });
+
+    socket.on('message', (raw) => {
+      let message;
+      try {
+        message = JSON.parse(raw.toString());
+      } catch (_) {
+        socket.send(JSON.stringify({ type: 'ERROR', error: 'Invalid message.' }));
+        return;
+      }
+      const client = clients.get(socket);
+      if (!client) return;
+
+      if (message.type === 'JOIN') {
+        const room = rooms.get(String(message.sessionId || ''));
+        if (!room) {
+          socket.send(JSON.stringify({ type: 'ERROR', error: 'This room could not be found.' }));
+          return;
         }
+        if (client.roomId) {
+          const previous = rooms.get(client.roomId);
+          if (previous) leaveRoom(socket, previous);
+        }
+        const name = (typeof message.name === 'string' ? message.name : 'Guest').trim().slice(0, 24) || 'Guest';
+        client.roomId = room.id;
+        client.name = name;
+        room.participants.set(clientId, { id: clientId, name, joinedAt: Date.now() });
+        if (!room.hostId) room.hostId = clientId;
+        socket.send(JSON.stringify({ type: 'WELCOME', clientId, room: snapshot(room) }));
+        sendRoom(room, 'PRESENCE');
+        return;
+      }
 
-        // Update the database with the new watch party object
-        db.collection('watchParty').updateOne({ sessionId }, { $set: watchPartyDatabase[sessionId] }, (err, result) => {
-            if (err) {
-                console.log(err);
-            } else {
-                console.log('Updated watch party object in database: ', watchPartyDatabase[sessionId]);
-            }
-        });
+      if (message.type === 'LEAVE') {
+        const room = clients.get(socket)?.roomId && rooms.get(clients.get(socket).roomId);
+        if (room) leaveRoom(socket, room);
+        socket.send(JSON.stringify({ type: 'LEFT' }));
+        return;
+      }
 
-        // Broadcast the updated watch party object to all connected clients
-        wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) {
-                console.log('sending message with client id' + clientId);
-                if (action !== "INITIALIZE") {
-                    client.send(JSON.stringify({ watchParty: watchPartyDatabase[sessionId], action, clientId }));
-                }
-            }
-        });
+      const room = client.roomId && rooms.get(client.roomId);
+      if (!room) return;
+      if (['PLAY', 'PAUSE', 'SEEK'].includes(message.type)) {
+        if (clientId !== room.hostId) {
+          socket.send(JSON.stringify({ type: 'ERROR', error: 'Only the host can control playback.' }));
+          return;
+        }
+        const position = Number(message.position);
+        if (!Number.isFinite(position) || position < 0 || position > 86400) return;
+        room.position = position;
+        room.playing = message.type === 'PLAY';
+        room.startedAt = room.playing ? Date.now() : null;
+        room.updatedAt = Date.now();
+        sendRoom(room, 'PLAYBACK', { action: message.type, by: clientId });
+      } else if (message.type === 'CHAT') {
+        const text = typeof message.text === 'string' ? message.text.trim().slice(0, 500) : '';
+        if (!text) return;
+        const chatMessage = { id: randomUUID(), clientId, name: client.name, text, sentAt: Date.now() };
+        room.messages = [...room.messages, chatMessage].slice(-MAX_CHAT_MESSAGES);
+        sendRoom(room, 'CHAT');
+      } else if (message.type === 'ADD_TO_QUEUE') {
+        const videoId = getYouTubeId(message.youtubeUrl);
+        if (!videoId) {
+          socket.send(JSON.stringify({ type: 'ERROR', error: 'That YouTube link is not valid.' }));
+          return;
+        }
+        room.queue = [...room.queue, { id: randomUUID(), videoId, youtubeLink: `https://www.youtube.com/watch?v=${videoId}`, addedBy: client.name }].slice(0, 50);
+        sendRoom(room, 'QUEUE');
+      } else if (message.type === 'PLAY_NEXT') {
+        if (clientId !== room.hostId) {
+          socket.send(JSON.stringify({ type: 'ERROR', error: 'Only the host can change the video.' }));
+          return;
+        }
+        const next = room.queue.shift();
+        if (!next) return;
+        room.videoId = next.videoId;
+        room.youtubeLink = next.youtubeLink;
+        room.position = 0;
+        room.playing = false;
+        room.startedAt = null;
+        room.updatedAt = Date.now();
+        sendRoom(room, 'VIDEO_CHANGED');
+      } else if (message.type === 'REMOVE_FROM_QUEUE') {
+        if (clientId !== room.hostId) {
+          socket.send(JSON.stringify({ type: 'ERROR', error: 'Only the host can edit the queue.' }));
+          return;
+        }
+        room.queue = room.queue.filter((item) => item.id !== message.id);
+        sendRoom(room, 'QUEUE');
+      }
     });
-});
+
+    socket.on('close', () => {
+      const client = clients.get(socket);
+      if (!client) return;
+      const room = client.roomId && rooms.get(client.roomId);
+      if (room) leaveRoom(socket, room);
+      clients.delete(socket);
+    });
+  });
+
+  function leaveRoom(socket, room) {
+    const client = clients.get(socket);
+    if (!client) return;
+    room.participants.delete(client.clientId);
+    if (room.hostId === client.clientId) room.hostId = room.participants.keys().next().value || null;
+    client.roomId = null;
+    sendRoom(room, 'PRESENCE');
+  }
+
+  return { app, server, wss };
+}
+
+if (require.main === module) {
+  const { server } = createServer();
+  server.listen(PORT, '0.0.0.0', () => console.log(`Watch Party listening on ${PORT}`));
+}
+
+module.exports = { createApp, createServer, getYouTubeId, snapshot, currentPosition, rooms };
