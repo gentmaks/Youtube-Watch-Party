@@ -239,7 +239,7 @@ function createServer() {
 
 if (require.main === module) {
   const { server } = createServer();
-  server.listen(PORT, '0.0.0.0', () => console.log(`Watch Party listening on ${PORT}`));
+  server.listen(PORT, '0.0.0.0', () => console.log(`SyncStage listening on ${PORT}`));
 }
 
 module.exports = { createApp, createServer, getYouTubeId, snapshot, currentPosition, rooms };

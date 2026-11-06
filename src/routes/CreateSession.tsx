@@ -40,9 +40,9 @@ const CreateSession: React.FC = () => {
   return (
     <main className="landing">
       <header className="site-nav wrap">
-        <a className="brand" href="/" aria-label="Afterplay home">
+        <a className="brand" href="/" aria-label="SyncStage home">
           <span className="brand-mark"><PlayCircleOutlineRoundedIcon /></span>
-          <span>afterplay</span>
+          <span>SyncStage</span>
         </a>
         <nav aria-label="Main navigation">
           <a href="#how-it-works">How it works</a>
@@ -73,10 +73,10 @@ const CreateSession: React.FC = () => {
           <div className="social-proof"><div className="avatar-stack"><span>J</span><span>M</span><span>A</span><span>+</span></div><span><strong>Good things are better shared.</strong><br />Send a link. Everyone’s in.</span></div>
         </div>
 
-        <div className="hero-art" aria-label="A preview of an Afterplay watch room">
+        <div className="hero-art" aria-label="A preview of a SyncStage watch room">
           <div className="orbit orbit-one" /><div className="orbit orbit-two" />
           <div className="preview-window">
-            <div className="preview-topbar"><div className="window-dots"><i /><i /><i /></div><span>afterplay / slow-sunday</span><span className="preview-live"><i /> LIVE</span></div>
+            <div className="preview-topbar"><div className="window-dots"><i /><i /><i /></div><span>syncstage / slow-sunday</span><span className="preview-live"><i /> LIVE</span></div>
             <div className="preview-video">
               <div className="preview-photo" />
               <span className="film-label">A LITTLE ESCAPE</span>
@@ -110,7 +110,7 @@ const CreateSession: React.FC = () => {
         <div><span className="section-kicker">THREE LITTLE STEPS</span><h2>And you’re <em>together.</em></h2></div>
         <div className="steps"><article><span>01</span><h3>Pick your video</h3><p>Find something good on YouTube. Anything goes.</p></article><article><span>02</span><h3>Make it a room</h3><p>Paste the link and give your night a name.</p></article><article><span>03</span><h3>Send the invite</h3><p>Friends click in. You press play. That’s it.</p></article></div>
       </section>
-      <footer className="site-footer wrap"><a className="brand" href="/" aria-label="Afterplay home"><span className="brand-mark"><PlayCircleOutlineRoundedIcon /></span><span>afterplay</span></a><span>Good nights are better together.</span><span>Made for your next movie night <AutoAwesomeRoundedIcon /></span></footer>
+      <footer className="site-footer wrap"><a className="brand" href="/" aria-label="SyncStage home"><span className="brand-mark"><PlayCircleOutlineRoundedIcon /></span><span>SyncStage</span></a><span>Good nights are better together.</span><span>Made for your next movie night <AutoAwesomeRoundedIcon /></span></footer>
     </main>
   );
 };

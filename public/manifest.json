@@ -1,7 +1,13 @@
 {
-  "short_name": "Afterplay",
-  "name": "Afterplay Watch Party",
+  "short_name": "SyncStage",
+  "name": "SyncStage Watch Party",
   "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
     {
       "src": "favicon.ico",
       "sizes": "64x64 32x32 24x24 16x16",

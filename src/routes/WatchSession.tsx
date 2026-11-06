@@ -26,7 +26,7 @@ const WatchSession: React.FC = () => {
   const navigate = useNavigate();
   const [room, setRoom] = useState<Room | null>(null);
   const [error, setError] = useState("");
-  const [name, setName] = useState(() => localStorage.getItem("afterplay-name") || "");
+  const [name, setName] = useState(() => localStorage.getItem("syncstage-name") || localStorage.getItem("afterplay-name") || "");
   const [joined, setJoined] = useState(false);
   const [connection, setConnection] = useState<"connecting" | "connected" | "reconnecting" | "offline">("connecting");
   const [clientId, setClientId] = useState("");
@@ -132,7 +132,7 @@ const WatchSession: React.FC = () => {
   const submitJoin = (event: FormEvent) => {
     event.preventDefault();
     const cleanName = name.trim().slice(0, 24) || "Guest";
-    localStorage.setItem("afterplay-name", cleanName);
+    localStorage.setItem("syncstage-name", cleanName);
     setName(cleanName);
     connect(cleanName);
   };
@@ -151,15 +151,15 @@ const WatchSession: React.FC = () => {
 
   const videoTitle = useMemo(() => room?.name || "Your watch party", [room?.name]);
 
-  if (error) return <main className="room-state-page"><a className="brand" href="/"><span className="brand-mark"><PlayCircleOutlineRoundedIcon /></span><span>afterplay</span></a><section className="state-card"><span className="state-symbol">⌁</span><h1>This room went missing.</h1><p>{error}</p><button className="primary-button" onClick={() => navigate("/")}>Start a new room <ArrowBackRoundedIcon /></button></section></main>;
-  if (!room) return <main className="room-state-page"><a className="brand" href="/"><span className="brand-mark"><PlayCircleOutlineRoundedIcon /></span><span>afterplay</span></a><section className="state-card"><span className="spinner" /><h1>Finding your people…</h1><p>We’re getting the room ready.</p></section></main>;
+  if (error) return <main className="room-state-page"><a className="brand" href="/" aria-label="SyncStage home"><span className="brand-mark"><PlayCircleOutlineRoundedIcon /></span><span>SyncStage</span></a><section className="state-card"><span className="state-symbol">⌁</span><h1>This room went missing.</h1><p>{error}</p><button className="primary-button" onClick={() => navigate("/")}>Start a new room <ArrowBackRoundedIcon /></button></section></main>;
+  if (!room) return <main className="room-state-page"><a className="brand" href="/" aria-label="SyncStage home"><span className="brand-mark"><PlayCircleOutlineRoundedIcon /></span><span>SyncStage</span></a><section className="state-card"><span className="spinner" /><h1>Finding your people…</h1><p>We’re getting the room ready.</p></section></main>;
 
   const onLeave = () => { reconnectWanted.current = false; window.clearTimeout(reconnectTimer.current); setJoined(false); socket.current?.close(); navigate("/"); };
 
   return (
     <main className="watch-app">
       <header className="watch-header">
-        <a className="brand" href="/" aria-label="Afterplay home"><span className="brand-mark"><PlayCircleOutlineRoundedIcon /></span><span>afterplay</span></a>
+        <a className="brand" href="/" aria-label="SyncStage home"><span className="brand-mark"><PlayCircleOutlineRoundedIcon /></span><span>SyncStage</span></a>
         <div className="room-heading"><span className="room-live-mark"><i />{room.isPlaying ? "WATCHING NOW" : "ROOM IS OPEN"}</span><h1>{videoTitle}</h1></div>
         <div className="header-actions"><div className="participant-count"><PeopleAltRoundedIcon /><span>{room.participants.length}</span><span className="header-count-label">here</span></div><button className="invite-button" onClick={copyInvite}>{copied ? <CheckRoundedIcon /> : <LinkRoundedIcon />}<span>{copied ? "Copied" : "Invite friends"}</span></button><button className="icon-button header-more" onClick={onLeave} aria-label="Leave room" title="Leave room"><MoreHorizRoundedIcon /></button></div>
       </header>
@@ -188,7 +188,7 @@ const WatchSession: React.FC = () => {
         </aside>
       </div>
       {toast && <div className="toast" role="status"><CheckRoundedIcon />{toast}</div>}
-      {!joined && <div className="join-backdrop"><form className="join-card" onSubmit={submitJoin}><a className="brand" href="/"><span className="brand-mark"><PlayCircleOutlineRoundedIcon /></span><span>afterplay</span></a><span className="join-kicker"><i /> YOU’VE GOT AN INVITE</span><h2>{room.name}</h2><p>Your people are waiting. What should we call you?</p><label htmlFor="display-name">YOUR NAME</label><input id="display-name" type="text" maxLength={24} placeholder="e.g. Sam" value={name} onChange={(event) => setName(event.target.value)} autoFocus /><button className="primary-button" type="submit" disabled={connection === "connecting" && socket.current !== null}>Join the party <PlayArrowRoundedIcon /></button><small>No account needed. Just good company.</small></form></div>}
+      {!joined && <div className="join-backdrop"><form className="join-card" onSubmit={submitJoin}><a className="brand" href="/" aria-label="SyncStage home"><span className="brand-mark"><PlayCircleOutlineRoundedIcon /></span><span>SyncStage</span></a><span className="join-kicker"><i /> YOU’VE GOT AN INVITE</span><h2>{room.name}</h2><p>Your people are waiting. What should we call you?</p><label htmlFor="display-name">YOUR NAME</label><input id="display-name" type="text" maxLength={24} placeholder="e.g. Sam" value={name} onChange={(event) => setName(event.target.value)} autoFocus /><button className="primary-button" type="submit" disabled={connection === "connecting" && socket.current !== null}>Join the party <PlayArrowRoundedIcon /></button><small>No account needed. Just good company.</small></form></div>}
       <div className="room-mobile-bar"><span className="mobile-sync"><i />{connection === "connected" ? "In sync" : "Connecting"}</span><button onClick={copyInvite}><LinkRoundedIcon /> Invite</button></div>
       {playerReady && duration > 0 && <span className="sr-only">Video length {Math.floor(duration / 60)} minutes</span>}
     </main>

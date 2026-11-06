@@ -1,6 +1,6 @@
-# Afterplay
+# SyncStage
 
-Afterplay makes a YouTube watch night feel shared, even when everyone is somewhere else. Create a room from a YouTube link, invite friends with one URL, and watch together with synchronized playback, chat, and a collaborative queue. No account is required.
+SyncStage makes a YouTube watch night feel shared, even when everyone is somewhere else. Create a room from a YouTube link, invite friends with one URL, and watch together with synchronized playback, chat, and a collaborative queue. No account is required.
 
 ## Features
 
