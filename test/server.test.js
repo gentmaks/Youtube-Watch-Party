@@ -63,6 +63,13 @@ test('creates rooms and synchronizes playback, presence, chat, queue, and late j
   assert.equal(playback.room.isPlaying, true);
   assert.ok(playback.room.position >= 42);
 
+  const seekReceived = nextMessage(second, 'PLAYBACK');
+  first.send(JSON.stringify({ type: 'SEEK', position: 86 }));
+  const seek = await seekReceived;
+  assert.equal(seek.action, 'SEEK');
+  assert.equal(seek.room.isPlaying, true);
+  assert.ok(seek.room.position >= 86);
+
   const guestDenied = nextMessage(second, 'ERROR');
   second.send(JSON.stringify({ type: 'PAUSE', position: 1 }));
   assert.match((await guestDenied).error, /host/);
@@ -77,13 +84,24 @@ test('creates rooms and synchronizes playback, presence, chat, queue, and late j
   assert.equal(queued.room.queue.length, 1);
   assert.equal(queued.room.queue[0].videoId, '9bZkp7q19f0');
 
+  const pauseReceived = nextMessage(second, 'PLAYBACK');
+  first.send(JSON.stringify({ type: 'PAUSE', position: 93 }));
+  const paused = await pauseReceived;
+  assert.equal(paused.action, 'PAUSE');
+  assert.equal(paused.room.isPlaying, false);
+  assert.equal(paused.room.position, 93);
+
+  const resumed = nextMessage(second, 'PLAYBACK');
+  first.send(JSON.stringify({ type: 'PLAY', position: 93 }));
+  assert.equal((await resumed).room.isPlaying, true);
+
   const late = new WebSocket(`ws://127.0.0.1:${server.address().port}/ws`);
   await new Promise((resolve) => late.once('open', resolve));
   late.send(JSON.stringify({ type: 'JOIN', sessionId, name: 'Alex' }));
   const lateWelcome = await nextMessage(late, 'WELCOME');
   assert.equal(lateWelcome.room.participants.length, 3);
   assert.equal(lateWelcome.room.isPlaying, true);
-  assert.ok(lateWelcome.room.position >= 42);
+  assert.ok(lateWelcome.room.position >= 93);
   assert.equal(lateWelcome.room.messages[0].text, 'This is lovely!');
   assert.equal(lateWelcome.room.queue.length, 1);
   assert.equal(lateWelcome.room.hostId, hostId);

@@ -156,7 +156,8 @@ function createServer() {
         const position = Number(message.position);
         if (!Number.isFinite(position) || position < 0 || position > 86400) return;
         room.position = position;
-        room.playing = message.type === 'PLAY';
+        if (message.type === 'PLAY') room.playing = true;
+        if (message.type === 'PAUSE') room.playing = false;
         room.startedAt = room.playing ? Date.now() : null;
         room.updatedAt = Date.now();
         sendRoom(room, 'PLAYBACK', { action: message.type, by: clientId });
