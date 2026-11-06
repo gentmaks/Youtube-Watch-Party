@@ -1,198 +1,91 @@
-import { Box, Button } from "@mui/material";
-import React, { useRef, useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ReactPlayer from "react-player";
+import PauseRoundedIcon from "@mui/icons-material/PauseRounded";
+import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded";
+import Replay10RoundedIcon from "@mui/icons-material/Replay10Rounded";
+import Forward10RoundedIcon from "@mui/icons-material/Forward10Rounded";
+import VolumeUpRoundedIcon from "@mui/icons-material/VolumeUpRounded";
+import FullscreenRoundedIcon from "@mui/icons-material/FullscreenRounded";
 
-// Component that wraps the ReactPlayer component and handles all the websocket communication
 interface VideoPlayerProps {
   url: string;
-  hideControls?: boolean;
-  sessionId: string;
+  playing: boolean;
+  position: number;
+  syncCommand: { sequence: number; position: number };
+  isHost: boolean;
+  onPlay: () => void;
+  onPause: () => void;
+  onSeek: (seconds: number) => void;
+  onProgress: (seconds: number) => void;
+  onDuration: (seconds: number) => void;
+  onReady: () => void;
 }
 
-const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, hideControls, sessionId }) => {
-  // variables to keep track of the state of the video
-  const [hasJoined, setHasJoined] = useState(false);
-  const [isReady, setIsReady] = useState(false);
+const formatTime = (seconds: number) => {
+  if (!Number.isFinite(seconds)) return "0:00";
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
+};
+
+const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, playing, position, syncCommand, isHost, onPlay, onPause, onSeek, onProgress, onDuration, onReady }) => {
   const player = useRef<ReactPlayer>(null);
-  const ws = useRef<WebSocket | null>(null);
-  const clientId = useRef<string | null>(null);
-  const [isBuffering, setIsBuffering] = useState(false);
-  const [lastPlayedSeconds, setLastPlayedSeconds] = useState(0);
+  const seekRef = useRef<HTMLInputElement>(null);
+  const [duration, setDuration] = useState(0);
+  const [localPosition, setLocalPosition] = useState(position);
+  const [ready, setReady] = useState(false);
+  const appliedSequence = useRef(0);
 
+  useEffect(() => setLocalPosition(position), [position]);
   useEffect(() => {
-    // establish websocket connection
-    ws.current = new WebSocket("ws://localhost:" + process.env.REACT_APP_WS_PORT);
-    ws.current.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      // handle messages from server
-      if (data.action === "INITIALIZE" && clientId.current === null) {
-        clientId.current = data.clientId;
-        if (player.current && data.watchParty.timestamp && Math.abs(player.current.getCurrentTime() - data.watchParty.timestamp) > 2) {
-          player.current?.seekTo(data.watchParty.timestamp);
-        } else if (player.current && !data.watchParty.timestamp) {
-          player.current?.seekTo(0);
-        }
-        if (!data.watchParty.isPlaying) {
-          setIsReady(false);
-        } else {
-          setIsReady(true);
-        }
-      } else if (data.action === "PLAY" && clientId.current !== data.clientId && data.watchParty.sessionId === sessionId) {
-        // only seek if the timestamp is different by more than 2 seconds
-        if (player.current && data.watchParty.timestamp && Math.abs(player.current.getCurrentTime() - data.watchParty.timestamp) > 2) {
-          player.current?.seekTo(data.watchParty.timestamp);
-        }
-        setIsReady(true);
-      } else if (data.action === "PAUSE" && clientId.current !== data.clientId && data.watchParty.sessionId === sessionId) {
-        // pause video
-        if (player.current && data.watchParty.timestamp && Math.abs(player.current.getCurrentTime() - data.watchParty.timestamp) > 2) {
-          player.current?.seekTo(data.watchParty.timestamp);
-        }
-        setIsReady(false);
-      } else if (data.action === "BUFFER" && clientId.current !== data.clientId && data.watchParty.sessionId === sessionId) {
-        // buffer video
-        if (player.current && data.watchParty.timestamp && Math.abs(player.current.getCurrentTime() - data.watchParty.timestamp) > 2) {
-          player.current?.seekTo(data.watchParty.timestamp);
-        }
-        setIsBuffering(true);
-      } else if (data.action === "SEEK" && clientId.current !== data.clientId && data.watchParty.sessionId === sessionId) {
-        // seek video
-        if (player.current && data.watchParty.timestamp && Math.abs(player.current.getCurrentTime() - data.watchParty.timestamp) > 2) {
-          player.current?.seekTo(data.watchParty.timestamp);
-          setLastPlayedSeconds(data.watchParty.timestamp);
-        }
-      } else if (data.action === "END" && data.watchParty.sessionId === sessionId) {
-        console.log("Received end message");
-        // end video NOTE: nothing for now since it was not a requirement in the project description but we could easily add some 
-        // functionality in regards to the video ending as well.
-      }
-
-    }
-    return () => {
-      ws.current?.close();
-      console.log("Websocket closed");
-    };
-  }, []);
-
-  // Handles the ready event from the video player
-  const handleReady = () => {
-    console.log("Video ready");
-    setIsReady(true);
+    if (!ready || syncCommand.sequence === 0 || syncCommand.sequence === appliedSequence.current) return;
+    appliedSequence.current = syncCommand.sequence;
+    player.current?.seekTo(syncCommand.position, "seconds");
+    setLocalPosition(syncCommand.position);
+  }, [ready, syncCommand]);
+  const onPlayerDuration = (value: number) => { setDuration(value); onDuration(value); };
+  const seek = (seconds: number) => {
+    const bounded = Math.max(0, duration ? Math.min(seconds, duration) : seconds);
+    player.current?.seekTo(bounded, "seconds");
+    setLocalPosition(bounded);
+    onSeek(bounded);
   };
-
-  // Handles the end event from the video player
-  const handleEnd = () => {
-    console.log("Video ended");
-    ws.current?.send(JSON.stringify({ action: "END" }));
+  const commitSeek = () => {
+    if (seekRef.current) seek(Number(seekRef.current.value));
   };
-
-  // Handles the seek event from the video player
-  const handleSeek = (seconds: number) => {
-    console.log(
-      "User seeked video to time: ",
-      seconds
-
-    );
-    ws.current?.send(JSON.stringify({ action: "SEEK", timestamp: seconds, sessionId: sessionId, clientId: clientId.current }));
-  };
-
-  // Handles the play event from the video player
-  const handlePlay = () => {
-    console.log(
-      "User played video at time: ",
-      player.current?.getCurrentTime(),
-      " with client ID: ",
-      clientId.current
-    );
-    ws.current?.send(JSON.stringify({ action: "PLAY", timestamp: player.current?.getCurrentTime(), sessionId: sessionId, clientId: clientId.current }));
-  };
-
-  // Handles the pause event from the video player
-  const handlePause = () => {
-    console.log(
-      "User paused video at time: ",
-      player.current?.getCurrentTime(),
-      " with client ID: ",
-      clientId.current
-    );
-    ws.current?.send(JSON.stringify({ action: "PAUSE", timestamp: player.current?.getCurrentTime(), sessionId: sessionId, clientId: clientId.current }));
-  };
-
-  // Handles the buffer event from the video player
-  const handleBuffer = () => {
-    console.log(
-      "User buffered video at time: ",
-      player.current?.getCurrentTime(),
-      " with client ID: ",
-      clientId.current
-    );
-    ws.current?.send(JSON.stringify({ action: "BUFFER", timestamp: player.current?.getCurrentTime(), sessionId: sessionId, clientId: clientId.current }));
-  };
-
-  // Handles the progress event from the video player
-  const handleProgress = (state: {
-    played: number;
-    playedSeconds: number;
-    loaded: number;
-    loadedSeconds: number;
-  }) => {
-    if (!isBuffering && Math.abs(state.playedSeconds - lastPlayedSeconds) > 1.5) {
-      handleSeek(state.playedSeconds);
-    }
-    setLastPlayedSeconds(state.playedSeconds);
-  };
+  const skip = (delta: number) => seek(Math.max(0, Math.min(duration || Infinity, (player.current?.getCurrentTime() || position) + delta)));
 
   return (
-    <Box
-      width="100%"
-      height="100%"
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
-      flexDirection="column"
-    >
-      <Box
-        width="100%"
-        height="100%"
-        display={hasJoined ? "flex" : "none"}
-        flexDirection="column"
-      >
+    <div className="player-shell">
+      <div className="player-frame">
         <ReactPlayer
           ref={player}
           url={url}
-          playing={hasJoined && isReady}
-          controls={!hideControls}
-          onReady={handleReady}
-          onEnded={handleEnd}
-          onSeek={handleSeek}
-          onPlay={handlePlay}
-          onPause={handlePause}
-          onBuffer={handleBuffer}
-          onProgress={handleProgress}
-          onBufferEnd={() => setIsBuffering(false)}
+          playing={playing}
+          controls={false}
+          onReady={() => { setReady(true); if (position > 0) player.current?.seekTo(position, "seconds"); onReady(); }}
+          onDuration={onPlayerDuration}
+          onProgress={(state) => { setLocalPosition(state.playedSeconds); onProgress(state.playedSeconds); }}
+          onPlay={onPlay}
+          onPause={onPause}
           width="100%"
           height="100%"
-          style={{ pointerEvents: hideControls ? "none" : "auto" }}
+          config={{ youtube: { playerVars: { modestbranding: 1, rel: 0, playsinline: 1 } } }}
         />
-      </Box>
-      {!hasJoined && isReady && (
-        // Youtube doesn't allow autoplay unless you've interacted with the page already
-        // So we make the user click "Join Session" button and then start playing the video immediately after
-        // This is necessary so that when people join a session, they can seek to the same timestamp and start watching the video with everyone else
-        <Button
-          variant="contained"
-          size="large"
-          onClick={() => {
-            setIsReady(false);
-            setHasJoined(true);
-            ws.current?.send(JSON.stringify({ action: "INITIALIZE", timestamp: player.current?.getCurrentTime(), sessionId: sessionId }));
-          }
-          }
-        >
-          Watch Session
-        </Button>
-      )}
-    </Box>
+        {!ready && <div className="player-loading"><span className="spinner" /><span>Getting the room ready…</span></div>}
+        {!playing && ready && <button className="player-center-play" onClick={isHost ? onPlay : undefined} disabled={!isHost} aria-label={isHost ? "Play for everyone" : "Waiting for the host"}><PlayArrowRoundedIcon /></button>}
+      </div>
+      <div className="player-controls">
+        <div className="control-main">
+          <button className="play-toggle" onClick={playing ? onPause : onPlay} disabled={!isHost} aria-label={playing ? "Pause for everyone" : "Play for everyone"} title={isHost ? (playing ? "Pause for everyone" : "Play for everyone") : "The host controls playback"}>{playing ? <PauseRoundedIcon /> : <PlayArrowRoundedIcon />}</button>
+          <button className="icon-button skip-button" onClick={() => skip(-10)} disabled={!isHost} aria-label="Back 10 seconds"><Replay10RoundedIcon /></button>
+          <button className="icon-button skip-button" onClick={() => skip(10)} disabled={!isHost} aria-label="Forward 10 seconds"><Forward10RoundedIcon /></button>
+          <span className="time-readout">{formatTime(localPosition)} <i>/</i> {formatTime(duration)}</span>
+        </div>
+        <div className="timeline-wrap"><input ref={seekRef} className="timeline" type="range" min="0" max={Math.max(1, duration)} step="0.25" value={Math.min(localPosition, duration || localPosition)} style={{ background: `linear-gradient(to right, var(--coral) 0%, var(--coral) ${duration ? (localPosition / duration) * 100 : 0}%, #50514d ${duration ? (localPosition / duration) * 100 : 0}%, #50514d 100%)` }} onChange={(event) => setLocalPosition(Number(event.target.value))} onPointerUp={commitSeek} onKeyUp={commitSeek} disabled={!isHost || !ready} aria-label="Seek video" /></div>
+        <div className="control-end"><span className="sound-control"><VolumeUpRoundedIcon /></span><button className="icon-button" aria-label="Fullscreen" onClick={() => { const root = player.current?.getInternalPlayer?.(); if (root?.getIframe?.()?.requestFullscreen) root.getIframe().requestFullscreen(); }}><FullscreenRoundedIcon /></button></div>
+      </div>
+      {!isHost && <p className="host-control-note">The host is in control of playback</p>}
+    </div>
   );
 };
 
