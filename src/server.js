@@ -95,7 +95,7 @@ function createApp() {
 
   const buildPath = path.join(__dirname, '..', 'build');
   app.use(express.static(buildPath));
-  app.get('*', (_req, res) => res.sendFile(path.join(buildPath, 'index.html')));
+  app.get(/.*/, (_req, res) => res.sendFile(path.join(buildPath, 'index.html')));
   return app;
 }
 
@@ -103,10 +103,27 @@ function createServer() {
   const app = createApp();
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server, path: '/ws' });
+  const heartbeat = setInterval(() => {
+    for (const socket of wss.clients) {
+      const client = clients.get(socket);
+      if (client && !client.isAlive) {
+        socket.terminate();
+        continue;
+      }
+      if (client) client.isAlive = false;
+      socket.ping();
+    }
+  }, 30000);
+  heartbeat.unref();
+  wss.on('close', () => clearInterval(heartbeat));
 
   wss.on('connection', (socket) => {
     const clientId = randomUUID();
-    clients.set(socket, { clientId, roomId: null, name: 'Guest' });
+    clients.set(socket, { clientId, roomId: null, name: 'Guest', isAlive: true });
+    socket.on('pong', () => {
+      const client = clients.get(socket);
+      if (client) client.isAlive = true;
+    });
 
     socket.on('message', (raw) => {
       let message;
