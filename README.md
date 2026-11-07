@@ -11,6 +11,8 @@ SyncStage makes a YouTube watch night feel shared, even when everyone is somewhe
 - See who's online, who is hosting, and what is queued next.
 - Rejoin after transient socket disconnects; the server sends the current authoritative room snapshot.
 - Responsive landing and watch-room layouts with accessible controls and connection feedback.
+- Create hosted rooms from the terminal with the `npx syncstage` CLI.
+- Developer guide at [gentshare.vercel.app/docs](https://gentshare.vercel.app/docs).
 
 ## Architecture
 
@@ -58,6 +60,20 @@ For frontend development with hot reload, use two terminals. Start the server wi
 | `VITE_WS_URL` | Production frontend | WebSocket URL for the Render service, e.g. `wss://afterplay-h8tc.onrender.com/ws`. Vite embeds it at build time. |
 
 The local Vite development server proxies API and WebSocket traffic to `localhost:5000`. Production API requests are forwarded by the Vercel rewrite in `vercel.json`; the frontend's `VITE_WS_URL` connects to Render.
+
+## CLI
+
+Requires Node.js 22 or newer. Create a hosted room and print its invite URL:
+
+```bash
+npx syncstage --video "https://youtu.be/dQw4w9WgXcQ"
+npx syncstage --video "https://youtu.be/dQw4w9WgXcQ" --name "Sunday films" --open
+npx syncstage --video "https://youtu.be/dQw4w9WgXcQ" --json
+```
+
+Options include `--name`, `--open`, `--json`, `--server`, and `--help`. From a checkout, run `npm run cli -- --help`. Rooms are created on the hosted service by default; the browser UI and WebSocket connection continue to use the production app/backend.
+
+The package is prepared for publication as `syncstage` on npm. To release it, update `version` in `package.json`, run `npm publish`, and verify with `npx syncstage --help`. npm publishing requires a logged-in account with package publish access.
 
 ## Checks
 

@@ -47,6 +47,7 @@ const CreateSession: React.FC = () => {
         <nav aria-label="Main navigation">
           <a href="#how-it-works">How it works</a>
           <a href="#features">The good stuff</a>
+          <a href="/docs">Developers</a>
         </nav>
         <a className="nav-cta" href="#start">Start a room <ArrowForwardRoundedIcon /></a>
       </header>
